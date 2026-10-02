@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import type { MemberDetail, SourceDocument } from '../types';
+import type { MemberDetail } from '../types';
 import { ClinicalTimeline } from './ClinicalTimeline';
 import { InsuranceTab } from './InsuranceTab';
 import { AttachmentsTab } from './AttachmentsTab';
+import { DocumentViewer } from './DocumentViewer';
 
 interface MemberDetailPanelProps {
   detail: MemberDetail;
@@ -28,7 +28,7 @@ export function MemberDetailPanel({ detail, activeTab }: MemberDetailPanelProps)
       {activeTab === 'encounters' && <EncountersTable items={encounters} />}
       {activeTab === 'diagnoses' && <DiagnosesTable items={diagnoses} />}
       {activeTab === 'labs' && <LabsTable items={labs} />}
-      {activeTab === 'sources' && <SourcesPanel items={sources} />}
+      {activeTab === 'sources' && <DocumentViewer items={sources} />}
       {activeTab === 'insurance' && <InsuranceTab claims={claims} />}
       {activeTab === 'attachments' && <AttachmentsTab attachments={attachments} />}
     </div>
@@ -126,27 +126,5 @@ function LabsTable({ items }: { items: MemberDetail['labs'] }) {
         ))}
       </tbody>
     </table>
-  );
-}
-
-function SourcesPanel({ items }: { items: SourceDocument[] }) {
-  const [expanded, setExpanded] = useState<string | null>(null);
-  if (!items || items.length === 0) return <div className="detail-empty">No source documents found</div>;
-  return (
-    <div className="sources-list">
-      {items.map((src) => (
-        <div key={src.source_id} className="source-card">
-          <div className="source-header" onClick={() => setExpanded(expanded === src.source_id ? null : src.source_id)}>
-            <div className="source-icon">{src.source_type === 'clinical_note' ? '\u{1F4CB}' : '\u{1F4C4}'}</div>
-            <div className="source-info">
-              <div className="source-title">{src.title}</div>
-              <div className="source-meta">{src.author} · {src.date}</div>
-            </div>
-            <span className="evidence-chevron">{expanded === src.source_id ? '\u25BC' : '\u25B6'}</span>
-          </div>
-          {expanded === src.source_id && <div className="source-content">{src.content}</div>}
-        </div>
-      ))}
-    </div>
   );
 }

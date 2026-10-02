@@ -107,6 +107,14 @@ export interface AskRequest {
 export interface AskResponse {
   answer: string;
   evidence_chain: EvidenceItem[];
+  citations: {
+    index: number;
+    source_type: string;
+    source_name: string;
+    source_id: string | null;
+    content_preview: string;
+    metadata: Record<string, string>;
+  }[];
   risk_level: string | null;
   contradiction_detected: boolean;
   contradiction_details: string | null;

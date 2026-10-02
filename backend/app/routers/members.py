@@ -184,3 +184,112 @@ async def get_member(member_id: str):
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Database error: {exc}") from exc
+
+
+@router.get("/{member_id}/risk-explanation")
+async def risk_explanation(member_id: str):
+    safe_id = member_id.replace("'", "''")
+    try:
+        delta_rows, lab_rows, med_rows, dx_rows = await asyncio.gather(
+            sql_client.execute(
+                f"SELECT OLD_RISK, NEW_RISK, TO_VARCHAR(CHANGED_AT, 'YYYY-MM-DD') AS CHANGED_AT, REASON "
+                f"FROM RISK_DELTA_LOG WHERE MEMBER_ID = '{safe_id}' ORDER BY CHANGED_AT DESC LIMIT 1"
+            ),
+            sql_client.execute(
+                f"SELECT TEST_NAME, RESULT_VALUE, UNIT "
+                f"FROM LAB_RESULT WHERE MEMBER_ID = '{safe_id}' AND ABNORMAL_FLAG = TRUE "
+                f"ORDER BY RESULT_DATE DESC LIMIT 10"
+            ),
+            sql_client.execute(
+                f"SELECT COUNT(*) AS CNT FROM MEDICATION "
+                f"WHERE MEMBER_ID = '{safe_id}' AND UPPER(STATUS) = 'ACTIVE'"
+            ),
+            sql_client.execute(
+                f"SELECT DESCRIPTION FROM DIAGNOSIS "
+                f"WHERE MEMBER_ID = '{safe_id}' AND UPPER(STATUS) = 'ACTIVE'"
+            ),
+        )
+
+        delta = delta_rows[0] if delta_rows else {}
+        current_risk = delta.get("NEW_RISK", "Unknown")
+        previous_risk = delta.get("OLD_RISK", "Unknown")
+        changed_at = delta.get("CHANGED_AT", "")
+
+        contributing: list[str] = []
+        med_count = int(med_rows[0]["CNT"]) if med_rows else 0
+        if med_count >= 5:
+            contributing.append(f"{med_count} active medications (polypharmacy threshold: 5)")
+
+        for lab in lab_rows:
+            name = lab.get("TEST_NAME", "")
+            val = lab.get("RESULT_VALUE", "")
+            unit = lab.get("UNIT", "")
+            contributing.append(f"{name} {val} {unit} (abnormal)".strip())
+
+        for dx in dx_rows:
+            desc = dx.get("DESCRIPTION", "")
+            if desc:
+                contributing.append(f"{desc} diagnosis active")
+
+        if delta.get("REASON"):
+            contributing.append(delta["REASON"])
+
+        risk_flags: list[str] = []
+        if med_count >= 5:
+            risk_flags.append("Polypharmacy")
+        dx_text = " ".join(d.get("DESCRIPTION", "").lower() for d in dx_rows)
+        for flag, keywords in [("CKD", ["ckd", "chronic kidney"]), ("Cardiac", ["cardiac", "heart", "chf"]), ("Diabetes", ["diabetes", "diabetic"]), ("COPD", ["copd", "pulmonary"])]:
+            if any(kw in dx_text for kw in keywords):
+                risk_flags.append(flag)
+
+        return {
+            "member_id": member_id,
+            "current_risk": current_risk,
+            "previous_risk": previous_risk,
+            "changed_at": changed_at,
+            "contributing_factors": contributing,
+            "risk_flags": risk_flags,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Database error: {exc}") from exc
+
+
+@router.get("/{member_id}/summary")
+async def member_summary(member_id: str):
+    safe_id = member_id.replace("'", "''")
+    try:
+        results = await asyncio.gather(
+            sql_client.execute(
+                f"SELECT COUNT(*) AS CNT FROM MEDICATION WHERE MEMBER_ID = '{safe_id}' AND UPPER(STATUS) = 'ACTIVE'"
+            ),
+            sql_client.execute(
+                f"SELECT COUNT(*) AS CNT FROM DIAGNOSIS WHERE MEMBER_ID = '{safe_id}' AND UPPER(STATUS) = 'ACTIVE'"
+            ),
+            sql_client.execute(
+                f"SELECT COUNT(*) AS CNT FROM LAB_RESULT WHERE MEMBER_ID = '{safe_id}' AND ABNORMAL_FLAG = TRUE"
+            ),
+            sql_client.execute(
+                f"SELECT COUNT(*) AS CNT FROM ENCOUNTER WHERE MEMBER_ID = '{safe_id}' AND ENCOUNTER_DATE >= DATEADD(day, -90, CURRENT_DATE())"
+            ),
+            sql_client.execute(
+                f"SELECT COUNT(*) AS CNT FROM CLAIM WHERE MEMBER_ID = '{safe_id}'"
+            ),
+            sql_client.execute(
+                f"SELECT COUNT(*) AS CNT FROM DOCUMENT WHERE MEMBER_ID = '{safe_id}'"
+            ),
+        )
+
+        def _cnt(rows: list[dict]) -> int:
+            return int(rows[0]["CNT"]) if rows else 0
+
+        return {
+            "active_medications": _cnt(results[0]),
+            "active_diagnoses": _cnt(results[1]),
+            "abnormal_labs": _cnt(results[2]),
+            "recent_encounters": _cnt(results[3]),
+            "total_claims": _cnt(results[4]),
+            "total_documents": _cnt(results[5]),
+            "compliance_gaps": 0,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Database error: {exc}") from exc

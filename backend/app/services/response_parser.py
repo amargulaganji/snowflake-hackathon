@@ -4,13 +4,14 @@ import json
 import re
 from typing import Any
 
-from app.models.schemas import AskResponse, EvidenceItem
+from app.models.schemas import AskResponse, Citation, EvidenceItem
 
 TOOL_DISPLAY_NAMES: dict[str, tuple[str, str]] = {
     "clinical_analyst": ("Structured Data Query", "structured"),
     "clinical_notes_search": ("Clinical Notes", "document"),
     "policy_docs_search": ("Policy Documents", "policy"),
     "drug_interaction_search": ("Drug Interaction Guidelines", "guideline"),
+    "document_search": ("Uploaded Documents", "document"),
     "score_polypharmacy_risk": ("Polypharmacy Risk Score", "udf"),
     "check_policy_compliance": ("Policy Compliance Check", "udf"),
 }
@@ -104,6 +105,70 @@ def _build_evidence(tool_results: list[dict]) -> list[EvidenceItem]:
     return items
 
 
+def _build_citations(tool_results: list[dict]) -> list[Citation]:
+    citations: list[Citation] = []
+    idx = 1
+    for tr in tool_results:
+        tool_name = tr.get("tool_name", tr.get("name", "unknown"))
+        parsed = _parse_tool_content(tr)
+
+        display_name, source_type = TOOL_DISPLAY_NAMES.get(
+            tool_name, (tool_name, "structured")
+        )
+
+        content_str = _summarize_tool_content(parsed, source_type)
+        if content_str in ('{"raw": ""}', '{"raw": "None"}', ""):
+            continue
+
+        meta: dict[str, Any] = {}
+        source_id: str | None = None
+
+        if source_type == "structured":
+            meta["table"] = parsed.get("table", parsed.get("source", tool_name))
+            for date_key in ("date", "result_date", "encounter_date", "service_date"):
+                if date_key in parsed:
+                    meta["date"] = str(parsed[date_key])
+                    break
+
+        elif source_type == "document":
+            meta["title"] = parsed.get("title", parsed.get("file_name", ""))
+            meta["author"] = parsed.get("author", "")
+            meta["date"] = parsed.get("date", parsed.get("note_date", ""))
+            source_id = parsed.get("document_id", parsed.get("note_id"))
+
+        elif source_type == "policy":
+            meta["policy_name"] = parsed.get("policy_name", parsed.get("name", ""))
+            meta["authority"] = parsed.get("authority", "")
+            meta["version"] = parsed.get("version", "")
+            meta["effective_date"] = parsed.get("effective_date", "")
+
+        elif source_type == "udf":
+            if "risk_level" in parsed:
+                meta["risk_level"] = parsed["risk_level"]
+            if "compliance_status" in parsed:
+                meta["compliance_status"] = parsed["compliance_status"]
+
+        elif source_type == "guideline":
+            meta["guideline_name"] = parsed.get("name", parsed.get("title", ""))
+            meta["section"] = parsed.get("section", "")
+
+        # Remove empty string values from metadata
+        meta = {k: v for k, v in meta.items() if v}
+
+        citations.append(
+            Citation(
+                index=idx,
+                source_type=source_type,
+                source_name=display_name,
+                source_id=source_id,
+                content_preview=content_str[:300],
+                metadata=meta,
+            )
+        )
+        idx += 1
+    return citations
+
+
 def _detect_risk(tool_results: list[dict]) -> str | None:
     for tr in tool_results:
         parsed = _parse_tool_content(tr)
@@ -191,6 +256,7 @@ def parse_agent_response(raw: dict) -> AskResponse:
         full_text = json.dumps(raw, default=str)[:2000]
 
     evidence = _build_evidence(all_tool_results)
+    citations = _build_citations(all_tool_results)
     risk_level = _detect_risk(all_tool_results)
     contradiction_detected, contradiction_details = _detect_contradiction(
         full_text, all_tool_results
@@ -200,6 +266,7 @@ def parse_agent_response(raw: dict) -> AskResponse:
     return AskResponse(
         answer=full_text,
         evidence_chain=evidence,
+        citations=citations,
         risk_level=risk_level,
         contradiction_detected=contradiction_detected,
         contradiction_details=contradiction_details,

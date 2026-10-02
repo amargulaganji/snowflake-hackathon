@@ -1,15 +1,19 @@
 import type { ReactNode } from 'react';
 
 interface LayoutProps {
-  sidebar: ReactNode;
+  nav: ReactNode;
   main: ReactNode;
+  memberContext?: ReactNode;
 }
 
-export function Layout({ sidebar, main }: LayoutProps) {
+export function Layout({ nav, main, memberContext }: LayoutProps) {
   return (
     <div className="layout">
-      <aside className="sidebar">{sidebar}</aside>
-      <main className="main-panel">{main}</main>
+      <aside className="app-sidebar">{nav}</aside>
+      <div className="main-panel">
+        {memberContext && <div className="member-context-bar">{memberContext}</div>}
+        <main className="main-content">{main}</main>
+      </div>
     </div>
   );
 }

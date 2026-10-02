@@ -24,6 +24,11 @@ export async function getMemberDetail(memberId: string): Promise<MemberDetail> {
   return data;
 }
 
+export async function getMemberRiskExplanation(memberId: string): Promise<any> {
+  const { data } = await api.get(`/members/${memberId}/risk-explanation`);
+  return data;
+}
+
 export async function askAgent(request: AskRequest): Promise<AskResponse> {
   const { data } = await api.post<AskResponse>('/ask', {
     member_id: request.member_id,
