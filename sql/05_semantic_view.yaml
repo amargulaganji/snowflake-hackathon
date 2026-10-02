@@ -1,0 +1,391 @@
+-- Semantic View YAML for Cortex Analyst
+-- This file defines the semantic model over structured clinical tables.
+-- Deploy with: CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML(...)
+-- See: sql/05_create_semantic_view.sql
+
+semantic_view:
+  name: CLINICAL_SEMANTIC_VIEW
+  database: CLINICAL_COPILOT
+  schema: CORE
+
+  description: >
+    Semantic view over clinical member data for care management teams.
+    Covers member demographics, encounters, medications, diagnoses, and lab results.
+    Optimized for polypharmacy risk review, medication compliance, and clinical quality queries.
+
+  custom_instructions: >
+    When answering questions about a specific member, always filter by member_id.
+    Use first_name and last_name together when displaying member names.
+    For polypharmacy queries, count only medications with status='active'.
+    A member is considered polypharmacy if they have 5 or more active medications.
+    Risk flags are stored as a JSON array in the MEMBER table.
+    When asked about drug interactions, note that this semantic view covers structured data only;
+    unstructured clinical notes and drug interaction guidelines are available via Cortex Search tools.
+
+  tables:
+    - name: Members
+      base_table:
+        database: CLINICAL_COPILOT
+        schema: CORE
+        table: MEMBER
+      description: Health plan members with demographics, plan information, and risk flags.
+      dimensions:
+        - name: member_id
+          expr: member_id
+          description: Unique member identifier
+          unique: true
+        - name: member_name
+          expr: first_name || ' ' || last_name
+          description: Full name of the member (first + last)
+          synonyms:
+            - patient name
+            - name
+        - name: first_name
+          expr: first_name
+          description: Member first name
+        - name: last_name
+          expr: last_name
+          description: Member last name
+        - name: gender
+          expr: gender
+          description: Member gender (Male/Female)
+        - name: plan_type
+          expr: plan_type
+          description: Insurance plan type (Medicare Advantage, Medicare FFS, Commercial HMO, Commercial PPO)
+          synonyms:
+            - insurance
+            - coverage type
+        - name: pcp_name
+          expr: pcp_name
+          description: Primary care physician name
+          synonyms:
+            - doctor
+            - primary care provider
+        - name: dob
+          expr: dob
+          description: Date of birth
+      facts:
+        - name: age
+          expr: age
+          description: Member age in years
+        - name: risk_flags
+          expr: risk_flags
+          description: JSON array of risk flag strings (e.g., polypharmacy, cardiac, CKD, fall_risk, dementia)
+      metrics:
+        - name: member_count
+          expr: COUNT(DISTINCT member_id)
+          description: Total number of members
+
+    - name: Encounters
+      base_table:
+        database: CLINICAL_COPILOT
+        schema: CORE
+        table: ENCOUNTER
+      description: Clinical encounters including office visits, ER visits, inpatient stays, and telehealth.
+      dimensions:
+        - name: encounter_id
+          expr: encounter_id
+          description: Unique encounter identifier
+          unique: true
+        - name: member_id
+          expr: member_id
+          description: Member associated with this encounter
+        - name: encounter_date
+          expr: encounter_date
+          description: Date of the encounter
+        - name: encounter_type
+          expr: encounter_type
+          description: Type of encounter (inpatient, outpatient, ER, telehealth)
+          synonyms:
+            - visit type
+        - name: provider_name
+          expr: provider_name
+          description: Name of the attending provider
+        - name: facility
+          expr: facility
+          description: Facility or clinic where the encounter occurred
+        - name: primary_diagnosis_code
+          expr: primary_diagnosis_code
+          description: Primary ICD-10 diagnosis code for the encounter
+      metrics:
+        - name: encounter_count
+          expr: COUNT(DISTINCT encounter_id)
+          description: Total number of encounters
+        - name: er_visit_count
+          expr: COUNT(DISTINCT CASE WHEN encounter_type = 'ER' THEN encounter_id END)
+          description: Number of ER visits
+        - name: inpatient_count
+          expr: COUNT(DISTINCT CASE WHEN encounter_type = 'inpatient' THEN encounter_id END)
+          description: Number of inpatient admissions
+
+    - name: Medications
+      base_table:
+        database: CLINICAL_COPILOT
+        schema: CORE
+        table: MEDICATION
+      description: Member medications including active, discontinued, and on-hold prescriptions.
+      dimensions:
+        - name: medication_id
+          expr: medication_id
+          description: Unique medication record identifier
+          unique: true
+        - name: member_id
+          expr: member_id
+          description: Member taking this medication
+        - name: drug_name
+          expr: drug_name
+          description: Name of the drug
+          synonyms:
+            - medication name
+            - medicine
+            - rx
+        - name: dosage
+          expr: dosage
+          description: Dosage amount and unit (e.g., 20mg, 500mg)
+        - name: route
+          expr: route
+          description: Route of administration (oral, inhalation, subcutaneous)
+        - name: frequency
+          expr: frequency
+          description: Dosing frequency (daily, twice daily, as needed)
+        - name: prescriber
+          expr: prescriber
+          description: Prescribing physician
+        - name: status
+          expr: status
+          description: Medication status (active, discontinued, on-hold)
+          synonyms:
+            - medication status
+        - name: start_date
+          expr: start_date
+          description: Date the medication was started
+        - name: end_date
+          expr: end_date
+          description: Date the medication was discontinued (NULL if active)
+      metrics:
+        - name: active_medication_count
+          expr: COUNT(DISTINCT CASE WHEN status = 'active' THEN medication_id END)
+          description: Number of currently active medications for a member
+          synonyms:
+            - active med count
+            - current medications
+        - name: total_medication_count
+          expr: COUNT(DISTINCT medication_id)
+          description: Total medication records including discontinued
+        - name: polypharmacy_member_count
+          expr: >
+            COUNT(DISTINCT CASE WHEN member_id IN
+              (SELECT m2.member_id FROM CLINICAL_COPILOT.CORE.MEDICATION m2
+               WHERE m2.status = 'active'
+               GROUP BY m2.member_id HAVING COUNT(*) >= 5)
+            THEN member_id END)
+          description: Number of members with 5+ active medications (polypharmacy)
+
+    - name: Diagnoses
+      base_table:
+        database: CLINICAL_COPILOT
+        schema: CORE
+        table: DIAGNOSIS
+      description: Member diagnoses with ICD-10 codes and status tracking.
+      dimensions:
+        - name: diagnosis_id
+          expr: diagnosis_id
+          description: Unique diagnosis record identifier
+          unique: true
+        - name: member_id
+          expr: member_id
+          description: Member with this diagnosis
+        - name: icd10_code
+          expr: icd10_code
+          description: ICD-10 diagnosis code
+          synonyms:
+            - diagnosis code
+            - ICD code
+        - name: description
+          expr: description
+          description: Human-readable diagnosis description
+          synonyms:
+            - diagnosis name
+            - condition
+        - name: diagnosed_date
+          expr: diagnosed_date
+          description: Date when the diagnosis was made
+        - name: status
+          expr: status
+          description: Diagnosis status (active, resolved, chronic)
+        - name: diagnosing_provider
+          expr: diagnosing_provider
+          description: Provider who made the diagnosis
+      metrics:
+        - name: active_diagnosis_count
+          expr: COUNT(DISTINCT CASE WHEN status IN ('active', 'chronic') THEN diagnosis_id END)
+          description: Number of active or chronic diagnoses
+        - name: chronic_condition_count
+          expr: COUNT(DISTINCT CASE WHEN status = 'chronic' THEN diagnosis_id END)
+          description: Number of chronic conditions
+
+    - name: LabResults
+      base_table:
+        database: CLINICAL_COPILOT
+        schema: CORE
+        table: LAB_RESULT
+      description: Laboratory test results with reference ranges and abnormal flags.
+      dimensions:
+        - name: lab_id
+          expr: lab_id
+          description: Unique lab result identifier
+          unique: true
+        - name: member_id
+          expr: member_id
+          description: Member whose lab this is
+        - name: test_name
+          expr: test_name
+          description: Name of the laboratory test
+          synonyms:
+            - lab test
+            - test
+        - name: loinc_code
+          expr: loinc_code
+          description: LOINC code for the lab test
+        - name: result_date
+          expr: result_date
+          description: Date the lab was resulted
+        - name: unit
+          expr: unit
+          description: Unit of measurement
+        - name: abnormal_flag
+          expr: abnormal_flag
+          description: Whether the result is outside reference range (TRUE/FALSE)
+      facts:
+        - name: result_value
+          expr: result_value
+          description: Numeric lab result value
+        - name: reference_range_low
+          expr: reference_range_low
+          description: Lower bound of normal reference range
+        - name: reference_range_high
+          expr: reference_range_high
+          description: Upper bound of normal reference range
+      metrics:
+        - name: abnormal_lab_count
+          expr: COUNT(DISTINCT CASE WHEN abnormal_flag = TRUE THEN lab_id END)
+          description: Number of abnormal lab results
+        - name: total_lab_count
+          expr: COUNT(DISTINCT lab_id)
+          description: Total number of lab results
+
+  relationships:
+    - name: member_encounters
+      left_table: Members
+      right_table: Encounters
+      join_type: one_to_many
+      relationship_columns:
+        - left_column: member_id
+          right_column: member_id
+    - name: member_medications
+      left_table: Members
+      right_table: Medications
+      join_type: one_to_many
+      relationship_columns:
+        - left_column: member_id
+          right_column: member_id
+    - name: member_diagnoses
+      left_table: Members
+      right_table: Diagnoses
+      join_type: one_to_many
+      relationship_columns:
+        - left_column: member_id
+          right_column: member_id
+    - name: member_labs
+      left_table: Members
+      right_table: LabResults
+      join_type: one_to_many
+      relationship_columns:
+        - left_column: member_id
+          right_column: member_id
+
+  verified_queries:
+    - name: member_active_medications
+      question: "What medications is member M001 currently taking?"
+      sql: >
+        SELECT m.drug_name, m.dosage, m.frequency, m.route, m.prescriber, m.start_date
+        FROM CLINICAL_COPILOT.CORE.MEDICATION m
+        WHERE m.member_id = 'M001' AND m.status = 'active'
+        ORDER BY m.start_date
+
+    - name: polypharmacy_members
+      question: "Which members have polypharmacy (5 or more active medications)?"
+      sql: >
+        SELECT mb.member_id, mb.first_name || ' ' || mb.last_name AS member_name,
+               mb.age, mb.plan_type, COUNT(*) AS active_med_count
+        FROM CLINICAL_COPILOT.CORE.MEDICATION m
+        JOIN CLINICAL_COPILOT.CORE.MEMBER mb ON m.member_id = mb.member_id
+        WHERE m.status = 'active'
+        GROUP BY mb.member_id, mb.first_name, mb.last_name, mb.age, mb.plan_type
+        HAVING COUNT(*) >= 5
+        ORDER BY active_med_count DESC
+
+    - name: member_abnormal_labs
+      question: "Show abnormal lab results for member M010"
+      sql: >
+        SELECT l.test_name, l.result_value, l.unit,
+               l.reference_range_low, l.reference_range_high, l.result_date
+        FROM CLINICAL_COPILOT.CORE.LAB_RESULT l
+        WHERE l.member_id = 'M010' AND l.abnormal_flag = TRUE
+        ORDER BY l.result_date DESC
+
+    - name: member_diagnoses_list
+      question: "What are the active diagnoses for member M002?"
+      sql: >
+        SELECT d.icd10_code, d.description, d.diagnosed_date, d.status, d.diagnosing_provider
+        FROM CLINICAL_COPILOT.CORE.DIAGNOSIS d
+        WHERE d.member_id = 'M002' AND d.status IN ('active', 'chronic')
+        ORDER BY d.diagnosed_date DESC
+
+    - name: er_visits_summary
+      question: "How many ER visits has each member had?"
+      sql: >
+        SELECT mb.member_id, mb.first_name || ' ' || mb.last_name AS member_name,
+               COUNT(*) AS er_visit_count
+        FROM CLINICAL_COPILOT.CORE.ENCOUNTER e
+        JOIN CLINICAL_COPILOT.CORE.MEMBER mb ON e.member_id = mb.member_id
+        WHERE e.encounter_type = 'ER'
+        GROUP BY mb.member_id, mb.first_name, mb.last_name
+        ORDER BY er_visit_count DESC
+
+    - name: member_profile
+      question: "Show me the full profile for member M006"
+      sql: >
+        SELECT mb.member_id, mb.first_name || ' ' || mb.last_name AS member_name,
+               mb.age, mb.gender, mb.plan_type, mb.pcp_name, mb.risk_flags,
+               (SELECT COUNT(*) FROM CLINICAL_COPILOT.CORE.MEDICATION m
+                WHERE m.member_id = mb.member_id AND m.status = 'active') AS active_meds,
+               (SELECT COUNT(*) FROM CLINICAL_COPILOT.CORE.DIAGNOSIS d
+                WHERE d.member_id = mb.member_id AND d.status IN ('active','chronic')) AS active_diagnoses,
+               (SELECT COUNT(*) FROM CLINICAL_COPILOT.CORE.LAB_RESULT l
+                WHERE l.member_id = mb.member_id AND l.abnormal_flag = TRUE) AS abnormal_labs
+        FROM CLINICAL_COPILOT.CORE.MEMBER mb
+        WHERE mb.member_id = 'M006'
+
+    - name: high_risk_elderly
+      question: "List elderly members (age 85+) with polypharmacy and cardiac conditions"
+      sql: >
+        SELECT DISTINCT mb.member_id, mb.first_name || ' ' || mb.last_name AS member_name,
+               mb.age, mb.plan_type
+        FROM CLINICAL_COPILOT.CORE.MEMBER mb
+        JOIN CLINICAL_COPILOT.CORE.MEDICATION m ON mb.member_id = m.member_id AND m.status = 'active'
+        WHERE mb.age >= 85
+          AND ARRAY_CONTAINS('polypharmacy'::VARIANT, mb.risk_flags)
+          AND ARRAY_CONTAINS('cardiac'::VARIANT, mb.risk_flags)
+        GROUP BY mb.member_id, mb.first_name, mb.last_name, mb.age, mb.plan_type
+        ORDER BY mb.age DESC
+
+    - name: medication_by_drug
+      question: "Which members are currently taking Warfarin?"
+      sql: >
+        SELECT mb.member_id, mb.first_name || ' ' || mb.last_name AS member_name,
+               m.dosage, m.prescriber, m.start_date
+        FROM CLINICAL_COPILOT.CORE.MEDICATION m
+        JOIN CLINICAL_COPILOT.CORE.MEMBER mb ON m.member_id = mb.member_id
+        WHERE m.drug_name = 'Warfarin' AND m.status = 'active'
+        ORDER BY mb.last_name
