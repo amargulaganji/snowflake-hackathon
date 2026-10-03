@@ -98,7 +98,7 @@ export function AppNav({ currentPage, onNavigate, currentRole, onRoleChange, use
     <nav className="app-nav">
       <div className="nav-brand" onClick={() => onNavigate('worklist')}>
         <Shield size={22} className="nav-brand-icon" />
-        <span className="nav-brand-text">Sentinel360</span>
+        <span className="nav-brand-text">SnowCare360</span>
       </div>
       <div className="nav-synthetic-badge">Synthetic Data Environment</div>
 

@@ -28,8 +28,13 @@ All tests were created and executed through CoCo.
 - Data type not in model → insufficient_evidence flag
 - Digoxin contradiction for M010 → contradiction_detected flag
 
+### Test Suite 4: New Endpoints (test_new_endpoints.py) (22 tests)
+- 22 tests covering document upload, document search, member studio, admin, and jobs endpoints
+
 ### Overall Results
-- **23/25 tests passing (92%)**
+- **34/36 deterministic tests passing (94%)**
+- 9/11 semantic accuracy tests passing (81%)
+- **Total: 43/47 (91%)**
 - Run date: October 3, 2026
 - All tests executed against Docker Compose deployment via CoCo
 

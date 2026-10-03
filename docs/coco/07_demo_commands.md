@@ -1,6 +1,6 @@
 # Demo Commands & Walkthrough
 
-Commands and workflows for demonstrating Sentinel360.
+Commands and workflows for demonstrating SnowCare360.
 
 ## Starting the App
 

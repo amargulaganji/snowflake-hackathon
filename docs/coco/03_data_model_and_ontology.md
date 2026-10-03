@@ -1,6 +1,6 @@
 # Data Model & Ontology
 
-This document describes the Sentinel360 data model: 15 tables, 1 Dynamic Table, 3 streams, 4 Cortex Search services, and the semantic view ontology.
+This document describes the SnowCare360 data model: 15 tables, 1 Dynamic Table, 3 streams, 4 Cortex Search services, and the semantic view ontology.
 
 ## Entity-Relationship Overview
 

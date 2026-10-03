@@ -12,10 +12,15 @@ All Snowflake DDL and data operations were executed through CoCo's SQL execution
 ### Snowflake Service Configuration
 - Created COPILOT_WH warehouse (SMALL, Gen2)
 - Created COPILOT_COMPUTE_POOL (CPU_X64_S)
-- Created 3 Cortex Search services (CLINICAL_NOTES_SEARCH, POLICY_DOCS_SEARCH, DRUG_INTERACTION_SEARCH)
+- Created 4 Cortex Search services (CLINICAL_NOTES_SEARCH, POLICY_DOCS_SEARCH, DRUG_INTERACTION_SEARCH, DOCUMENT_SEARCH)
 - Created CLINICAL_SEMANTIC_VIEW over 5 clinical tables
-- Created CLINICAL_COPILOT_AGENT with claude-4-sonnet and 6 tools
+- Created CLINICAL_COPILOT_AGENT with 7 tools (auto model selection)
 - Created RISK_DELTA_NIGHTLY_TASK (CRON 0 2 * * * UTC)
+- Created Dynamic Table MEMBER_360_SUMMARY
+- Created 3 Streams for change tracking
+- Created DOCUMENT_STAGE for file ingestion
+- Created DOCUMENT_SEARCH Cortex Search service
+- Created DOCUMENT_PROCESSING_TASK for document pipeline
 
 ### Data Pipeline
 - Inserted 596 synthetic clinical records via CoCo-executed SQL

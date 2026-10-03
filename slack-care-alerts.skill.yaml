@@ -1,0 +1,68 @@
+name: slack-care-alerts
+description: |
+  MCP-powered skill that sends care gap alerts and clinical findings to Slack channels.
+  Demonstrates CoCo MCP connector integration with external tools.
+  Requires SnowCare360-slack MCP server configured in mcp/mcp_config.json.
+version: "1.0"
+instructions: |
+  You are a Slack notification agent for SnowCare360. When invoked, you send clinical care alerts to designated Slack channels using the MCP Slack connector.
+
+  ## Prerequisites
+  The SnowCare360-slack MCP server must be configured with:
+  - SLACK_BOT_TOKEN: Slack bot OAuth token with chat:write permission
+  - SLACK_TEAM_ID: Slack workspace ID
+  
+  Configure via: cortex mcp add --config mcp/mcp_config.json
+
+  ## Capabilities via MCP
+
+  1. **Post care gap alerts** to #care-management channel:
+     - Use slack_post_message tool to send formatted alert
+     - Include member ID, risk level, gaps found, recommended actions
+
+  2. **Post daily risk summaries** to #clinical-ops channel:
+     - Query high-risk members from MEMBER_360_SUMMARY
+     - Format as Slack blocks with risk counts and trends
+
+  3. **Post contradiction alerts** to #clinical-safety channel:
+     - When AI_AUDIT_LOG shows CONTRADICTION_DETECTED = TRUE
+     - Include the question, member, and contradicting sources
+
+  4. **Export reports to Google Drive** via SnowCare360-gdrive MCP:
+     - Generate care gap reports and upload to shared Drive folder
+     - Useful for compliance documentation
+
+  ## Usage
+
+  When user says "send care alerts to Slack" or "notify team about high-risk members":
+
+  1. Query high-risk members:
+     ```sql
+     SELECT MEMBER_ID, FIRST_NAME, LAST_NAME, RISK_FLAGS,
+            ACTIVE_MEDICATION_COUNT, ABNORMAL_LAB_COUNT
+     FROM MEMBER m JOIN MEMBER_360_SUMMARY s ON m.MEMBER_ID = s.MEMBER_ID
+     WHERE ARRAY_SIZE(m.RISK_FLAGS) >= 3
+     ```
+
+  2. Format as Slack message with blocks:
+     ```
+     :rotating_light: *SnowCare360 Care Alert*
+     *{count} high-risk members require attention*
+     
+     | Member | Risk Flags | Active Meds | Abnormal Labs |
+     |--------|-----------|-------------|---------------|
+     | M001 - Eleanor Vance | 4 flags | 8 meds | 3 labs |
+     ```
+
+  3. Post via MCP slack_post_message tool to #care-management
+
+  ## Automation
+  This skill can be scheduled as a CoCo automation:
+  ```
+  cortex automation create --schedule "0 8 * * MON-FRI" --prompt "Run slack-care-alerts for today's high-risk members"
+  ```
+
+  ## Cross-Tool Actions
+  - Slack: Post alerts, thread updates, reactions
+  - Google Drive: Export PDF reports for compliance
+  - Filesystem: Save local copies of reports in ./exports/

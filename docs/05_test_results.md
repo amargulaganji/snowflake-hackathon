@@ -1,4 +1,4 @@
-# Sentinel360 — Test Results
+# SnowCare360 — Test Results
 
 **Run date:** 2026-10-03
 **Backend:** http://localhost:8000 (Docker Compose)

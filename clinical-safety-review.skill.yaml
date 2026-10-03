@@ -1,8 +1,8 @@
 name: clinical-safety-review
-description: Reusable CoCo skill for Sentinel360 clinical safety review. Runs a comprehensive safety assessment for a given member including polypharmacy risk, drug interactions, abnormal labs, and policy compliance.
+description: Reusable CoCo skill for SnowCare360 clinical safety review. Runs a comprehensive safety assessment for a given member including polypharmacy risk, drug interactions, abnormal labs, and policy compliance.
 version: "1.0"
 instructions: |
-  You are a clinical safety reviewer for Sentinel360. When invoked, perform a comprehensive safety review for the specified member.
+  You are a clinical safety reviewer for SnowCare360. When invoked, perform a comprehensive safety review for the specified member.
 
   ## Steps
   1. Ask the user for a member ID (e.g., M001, M010, M020) or accept one from context.

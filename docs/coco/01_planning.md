@@ -2,7 +2,7 @@
 
 ## Architecture Decisions
 
-All planning for Sentinel360 was done through Snowflake CoCo (Cortex Code), the Snowflake-native AI development assistant.
+All planning for SnowCare360 was done through Snowflake CoCo (Cortex Code), the Snowflake-native AI development assistant.
 
 ### Data Model Design
 - Designed 11-table clinical data model through CoCo conversation
@@ -12,7 +12,7 @@ All planning for Sentinel360 was done through Snowflake CoCo (Cortex Code), the 
 
 ### Architecture Design
 - 3-Stage AI Pipeline: Retrieval -> Risk Assessment -> Compliance
-- Cortex Agent with 6 tools (Cortex Analyst + 3 Cortex Search + 2 UDFs)
+- Cortex Agent with 7 tools (Cortex Analyst + 4 Cortex Search + 2 UDFs, including document_search)
 - Dual data path: Direct SQL for member search/detail (<1s), Cortex Agent for AI Q&A
 - SPCS deployment architecture with OAuth + PAT dual auth
 

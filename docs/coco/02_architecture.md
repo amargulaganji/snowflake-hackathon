@@ -1,10 +1,10 @@
 # Architecture Decisions
 
-This document records the Snowflake-native architecture decisions for Sentinel360, designed and implemented through Cortex Code (CoCo).
+This document records the Snowflake-native architecture decisions for SnowCare360, designed and implemented through Cortex Code (CoCo).
 
 ## Snowflake-First Design
 
-Sentinel360 runs entirely on Snowflake. No external databases, vector stores, or AI services are required.
+SnowCare360 runs entirely on Snowflake. No external databases, vector stores, or AI services are required.
 
 | Concern | Snowflake Service | Alternative Avoided |
 |---------|-------------------|---------------------|
@@ -124,7 +124,7 @@ Role switching is exposed via `POST /admin/users/switch-role`. The backend check
 
 ## Dual Data Path
 
-Sentinel360 uses two data paths optimized for different latency requirements:
+SnowCare360 uses two data paths optimized for different latency requirements:
 
 - **Direct SQL (SQL Statement API)**: Member search, detail, top-risk, and summary endpoints execute parameterized SQL for sub-second responses. No LLM involved.
 - **Cortex Agent**: The `/ask` endpoint routes through the full 3-stage pipeline. Response times are 10-30 seconds but include reasoning, evidence chains, and citations.

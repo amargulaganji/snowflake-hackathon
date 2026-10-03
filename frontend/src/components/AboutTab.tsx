@@ -4,13 +4,13 @@ export function AboutTab() {
   return (
     <div className="about-tab">
       <div className="about-header">
-        <h2>Sentinel360</h2>
+        <h2>SnowCare360</h2>
         <p className="about-tagline">Polypharmacy and compliance risk intelligence for care management teams</p>
       </div>
 
       <div className="about-section about-lead">
         <p>
-          Sentinel360 surfaces polypharmacy and compliance risk across your member population,
+          SnowCare360 surfaces polypharmacy and compliance risk across your member population,
           grounding every answer in cited clinical and policy evidence. Care managers can identify
           high-risk members, investigate medication interactions, verify policy compliance, and
           generate audit-ready documentation — all from a single interface backed by Snowflake.

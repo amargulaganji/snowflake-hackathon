@@ -1,8 +1,8 @@
-# Sentinel360 — Architecture
+# SnowCare360 — Architecture
 
 ## Overview
 
-Sentinel360 is a clinical copilot for care management teams. It allows users to search members, view their full clinical profile, and ask natural-language questions answered by an AI agent with full evidence chains.
+SnowCare360 is a clinical copilot for care management teams. It allows users to search members, view their full clinical profile, and ask natural-language questions answered by an AI agent with full evidence chains.
 
 **Snowflake is the sole data store and reasoning layer.** No external databases, no third-party AI APIs.
 

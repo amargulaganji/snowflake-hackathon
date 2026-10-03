@@ -1,6 +1,6 @@
 # Snowflake Resource Map
 
-Comprehensive inventory of every Snowflake object used by Sentinel360.
+Comprehensive inventory of every Snowflake object used by SnowCare360.
 
 **Account**: MQBQAAP-MH56160
 **Database**: CLINICAL_COPILOT
@@ -79,14 +79,12 @@ Comprehensive inventory of every Snowflake object used by Sentinel360.
 | MEDICATION_CHANGE_STREAM | MEDICATION | Append-only | Triggers risk delta recomputation |
 | LAB_RESULT_CHANGE_STREAM | LAB_RESULT | Append-only | Triggers risk delta recomputation |
 
-## Stage (1)
+## Stages (2)
 
-| Property | Value |
-|----------|-------|
-| Name | DOCUMENT_STAGE |
-| Type | Internal |
-| Encryption | SNOWFLAKE_SSE |
-| Purpose | Uploaded document file storage |
+| Stage | Type | Encryption | Purpose |
+|-------|------|------------|---------|
+| DOCUMENT_STAGE | Internal | SNOWFLAKE_SSE | Uploaded document file storage |
+| STREAMLIT_STAGE | Internal | SNOWFLAKE_SSE | Streamlit-in-Snowflake app files |
 
 ## Cortex Search Services (4)
 
@@ -154,6 +152,16 @@ Comprehensive inventory of every Snowflake object used by Sentinel360.
 | Schema | CORE |
 | Purpose | Docker image storage for SPCS deployment |
 
+## Streamlit App (1)
+
+| Property | Value |
+|----------|-------|
+| Name | SnowCare360_DASHBOARD |
+| Main File | dashboard.py |
+| Warehouse | COPILOT_WH |
+| Stage | @STREAMLIT_STAGE |
+| Purpose | Population health dashboard with risk distribution, medication analytics, lab trends, AI audit activity |
+
 ## Object Count Summary
 
 | Category | Count |
@@ -162,7 +170,7 @@ Comprehensive inventory of every Snowflake object used by Sentinel360.
 | Dynamic Tables | 1 |
 | Semantic Views | 1 |
 | Streams | 3 |
-| Stages | 1 |
+| Stages | 2 |
 | Cortex Search Services | 4 |
 | UDFs | 2 |
 | Cortex Agents | 1 |
@@ -171,4 +179,5 @@ Comprehensive inventory of every Snowflake object used by Sentinel360.
 | Compute Pools | 1 |
 | SPCS Services | 1 |
 | Image Repositories | 1 |
-| **Total Objects** | **34** |
+| Streamlit Apps | 1 |
+| **Total Objects** | **36** |

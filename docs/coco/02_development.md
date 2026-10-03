@@ -18,8 +18,8 @@ All application code was generated and iterated through Snowflake CoCo sessions.
 
 ### SQL / Snowflake Objects
 - Generated 9 SQL setup scripts (01_setup through 09_deploy_spcs)
-- Created Cortex Agent with 6 tools and detailed instructions
-- Created 3 Cortex Search services with embedding model configuration
+- Created Cortex Agent with 7 tools including document_search
+- Created 4 Cortex Search services (CLINICAL_NOTES_SEARCH, POLICY_DOCS_SEARCH, DRUG_INTERACTION_SEARCH, DOCUMENT_SEARCH)
 - Created Semantic View over 5 clinical tables
 - Created 2 SQL UDFs for risk scoring and compliance checking
 - Created Snowflake Task for nightly automation
