@@ -23,6 +23,8 @@ interface AppNavProps {
   currentRole: UserRole;
   onRoleChange: (role: UserRole) => void;
   userName: string;
+  isPreview?: boolean;
+  actualRole?: UserRole;
 }
 
 interface NavSection {
@@ -82,7 +84,7 @@ members: 'Search and browse synthetic members and open their complete Member 360
   settings: 'Manage users, roles, risk configuration, document sources, policies, and application settings.',
 };
 
-export function AppNav({ currentPage, onNavigate, currentRole, onRoleChange, userName }: AppNavProps) {
+export function AppNav({ currentPage, onNavigate, currentRole, onRoleChange, userName, isPreview, actualRole }: AppNavProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(NAV_SECTIONS.map((s) => s.label)));
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
 
@@ -151,7 +153,10 @@ export function AppNav({ currentPage, onNavigate, currentRole, onRoleChange, use
         </div>
         {showRoleSwitcher && (
           <div className="nav-role-switcher">
-            <div className="role-switcher-label">Demo Role Switcher</div>
+            <div className="role-switcher-label">Demo Role Preview (UI only)</div>
+            {isPreview && actualRole && (
+              <div className="role-switcher-note">Actual role: {ROLE_LABELS[actualRole]}. Backend permissions unchanged.</div>
+            )}
             {(Object.keys(ROLE_LABELS) as UserRole[]).map((role) => (
               <button
                 key={role}

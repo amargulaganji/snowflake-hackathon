@@ -1,20 +1,24 @@
 from __future__ import annotations
 
+from typing import Optional
+
 import httpx
 
-from app.auth import get_auth_headers
+from app.auth import get_service_auth_headers
 from app.config import settings
 
 
 class SnowflakeSQLClient:
-    """Execute SQL directly against Snowflake REST API — no LLM involved."""
-
     def __init__(self) -> None:
         base = settings.effective_account_url.rstrip("/")
         self.url = f"{base}/api/v2/statements"
 
-    async def execute(self, sql: str) -> list[dict]:
-        headers = get_auth_headers()
+    async def execute(
+        self,
+        sql: str,
+        caller_headers: dict[str, str] | None = None,
+    ) -> list[dict]:
+        headers = caller_headers or get_service_auth_headers()
         payload = {
             "statement": sql,
             "timeout": 30,
@@ -27,7 +31,6 @@ class SnowflakeSQLClient:
             resp.raise_for_status()
             data = resp.json()
 
-        # Parse Snowflake REST API response into list of dicts
         columns = [col["name"] for col in data.get("resultSetMetaData", {}).get("rowType", [])]
         rows = data.get("data", [])
         return [dict(zip(columns, row)) for row in rows]

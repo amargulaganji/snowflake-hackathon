@@ -2,21 +2,22 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.models.schemas import AskRequest, AskResponse
 from app.services.snowflake_client import agent_client
 from app.services.response_parser import parse_agent_response
 from app.services import audit_service
+from app.services.role_auth import require_permission, AuthenticatedUser
 
 router = APIRouter(tags=["agent"])
 
 
 @router.post("/ask", response_model=AskResponse)
-async def ask_agent(req: AskRequest, request: Request):
-    user_role = request.headers.get("X-User-Role", "admin")
-    user_id = request.headers.get("X-User-Id", "demo-user")
-
+async def ask_agent(
+    req: AskRequest,
+    user: AuthenticatedUser = Depends(require_permission),
+):
     messages = []
     for msg in req.history:
         messages.append({"role": msg.role, "content": msg.content})
@@ -43,8 +44,8 @@ async def ask_agent(req: AskRequest, request: Request):
     sources_used = [e.source_type for e in result.evidence_chain]
 
     await audit_service.log_audit(
-        user_id=user_id,
-        user_role=user_role,
+        user_id=user.username,
+        user_role=user.role,
         member_id=req.member_id,
         action="ask",
         question=req.question,

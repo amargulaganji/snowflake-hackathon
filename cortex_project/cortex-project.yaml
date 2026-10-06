@@ -1,0 +1,7 @@
+version: 1
+artifacts:
+  - path: ..\sql\05_semantic_view.yaml
+    type: semantic_view
+    targets:
+      default:
+        object: CLINICAL_COPILOT.CORE.CLINICAL_SEMANTIC_VIEW

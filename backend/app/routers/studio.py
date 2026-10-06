@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.services.role_auth import check_role
+from app.services.role_auth import require_role, AuthenticatedUser
+from app.auth import get_authenticated_user
 
 from app.models.schemas import (
     CreateMemberRequest,
@@ -18,7 +19,13 @@ from app.models.schemas import (
 from app.services.sql_client import sql_client
 from app.services.snowflake_client import agent_client
 
-router = APIRouter(prefix="/studio", tags=["studio"], dependencies=[Depends(check_role)])
+_WRITE_ROLES = ("SNOWCARE_ADMIN_ROLE", "CARE_MANAGER_ROLE")
+
+router = APIRouter(
+    prefix="/studio",
+    tags=["studio"],
+    dependencies=[Depends(require_role(*_WRITE_ROLES))],
+)
 
 
 async def _next_member_id() -> str:
@@ -41,8 +48,21 @@ def _safe_num(val: float | int | None) -> str:
     return str(val)
 
 
+async def _grant_member_access(member_id: str, username: str) -> None:
+    safe_user = username.replace("'", "''").upper()
+    safe_mid = member_id.replace("'", "''")
+    try:
+        await sql_client.execute(
+            f"INSERT INTO USER_MEMBER_ACCESS (SNOWFLAKE_USER, MEMBER_ID, ACCESS_LEVEL) "
+            f"SELECT '{safe_user}', '{safe_mid}', 'write' "
+            f"WHERE NOT EXISTS (SELECT 1 FROM USER_MEMBER_ACCESS WHERE SNOWFLAKE_USER='{safe_user}' AND MEMBER_ID='{safe_mid}')"
+        )
+    except Exception:
+        pass
+
+
 @router.post("/members")
-async def create_member(req: CreateMemberRequest):
+async def create_member(req: CreateMemberRequest, request: Request):
     try:
         member_id = await _next_member_id()
     except Exception as exc:
@@ -67,6 +87,8 @@ async def create_member(req: CreateMemberRequest):
     """
     try:
         await sql_client.execute(sql)
+        username = get_authenticated_user(request)
+        await _grant_member_access(member_id, username)
         return {"member_id": member_id, "status": "created"}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Database error: {exc}") from exc
@@ -237,7 +259,7 @@ async def add_note(member_id: str, req: CreateNoteRequest):
 
 
 @router.post("/generate")
-async def generate_synthetic(req: GenerateSyntheticRequest):
+async def generate_synthetic(req: GenerateSyntheticRequest, request: Request):
     prompt = (
         f"Generate a realistic synthetic healthcare member profile with the following parameters:\n"
         f"- Age range: {req.age_min} to {req.age_max}\n"
@@ -303,6 +325,8 @@ async def generate_synthetic(req: GenerateSyntheticRequest):
     """
     try:
         await sql_client.execute(insert_member)
+        username = get_authenticated_user(request)
+        await _grant_member_access(member_id, username)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Database error inserting member: {exc}") from exc
 

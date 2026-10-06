@@ -64,7 +64,7 @@ TESTS = [
         "url": "/admin/users/switch-role",
         "body": {"role": "care_manager"},
         "expect_status": 200,
-        "expect_keys": ["status", "new_role"],
+        "expect_keys": ["status", "actual_role", "preview_role"],
     },
     # Admin: audit log
     {
@@ -98,14 +98,14 @@ TESTS = [
         "expect_status": 200,
         "expect_keys": ["member_id", "contributing_factors", "risk_flags"],
     },
-    # Role authorization: studio blocked for care_manager
+    # Security: X-User-Role header is IGNORED - auth/me returns server-derived identity
     {
-        "name": "Studio blocked for care_manager role",
-        "method": "POST",
-        "url": "/studio/members",
-        "body": {"first_name": "Blocked", "last_name": "User"},
+        "name": "X-User-Role header ignored by auth/me",
+        "method": "GET",
+        "url": "/auth/me",
         "headers": {"X-User-Role": "care_manager"},
-        "expect_status": 403,
+        "expect_status": 200,
+        "expect_keys": ["username", "role", "permissions", "authentication_source"],
     },
     # Malformed document ID
     {

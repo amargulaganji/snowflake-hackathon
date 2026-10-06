@@ -40,7 +40,8 @@ const MEMBER_TABS: { key: MemberTab; label: string; Icon: typeof MessageSquare }
 export default function App() {
   const [currentPage, setCurrentPage] = useState<AppPage>('worklist');
   const [currentRole, setCurrentRole] = useState<UserRole>('admin');
-  const [userName] = useState('System Admin');
+  const [previewRole, setPreviewRole] = useState<UserRole | null>(null);
+  const [userName, setUserName] = useState('Loading...');
   const [selectedMember, setSelectedMember] = useState<MemberSummary | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [lastQuestion, setLastQuestion] = useState<string | null>(null);
@@ -52,6 +53,27 @@ export default function App() {
   const { detail, loading: detailLoading } = useMemberDetail(selectedMember?.member_id ?? null);
 
   useEffect(() => { getTopRiskMembers().then(setTopRisk).catch(() => {}); }, []);
+
+  useEffect(() => {
+    fetch('/auth/me')
+      .then(r => r.json())
+      .then(data => {
+        setUserName(data.username || 'Unknown');
+        const roleMap: Record<string, UserRole> = {
+          SNOWCARE_ADMIN_ROLE: 'admin',
+          CARE_MANAGER_ROLE: 'care_manager',
+          COMPLIANCE_ANALYST_ROLE: 'compliance_analyst',
+          OPERATIONS_ANALYST_ROLE: 'ops_analyst',
+        };
+        setCurrentRole(roleMap[data.role] || 'ops_analyst');
+      })
+      .catch(() => {
+        setUserName('LOCAL_DEV_USER');
+        setCurrentRole('admin');
+      });
+  }, []);
+
+  const effectiveRole = previewRole ?? currentRole;
 
   const handleSelectMember = useCallback((member: MemberSummary) => {
     setSelectedMember(member);
@@ -125,9 +147,11 @@ export default function App() {
     <AppNav
       currentPage={currentPage}
       onNavigate={handleNavigate}
-      currentRole={currentRole}
-      onRoleChange={setCurrentRole}
+      currentRole={effectiveRole}
+      onRoleChange={(role) => setPreviewRole(role === currentRole ? null : role)}
       userName={userName}
+      isPreview={previewRole !== null}
+      actualRole={currentRole}
     />
   );
 

@@ -8,3 +8,4 @@ build/
 *.egg-info/
 .pytest_cache/
 LOCAL_DOC.md
+setup-notes/

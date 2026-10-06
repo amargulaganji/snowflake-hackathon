@@ -3,14 +3,38 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.models.schemas import SwitchRoleRequest
-from app.services.role_auth import check_role
+from app.services.role_auth import (
+    require_authenticated_user,
+    require_permission,
+    require_role,
+    AuthenticatedUser,
+    ROLE_PERMISSIONS,
+)
 from app.services.sql_client import sql_client
+from app.auth import is_spcs_authenticated, has_caller_token
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(tags=["admin"])
 
 
-@router.get("/users")
-async def list_users(_role: str = Depends(check_role)):
+@router.get("/auth/me")
+async def auth_me(user: AuthenticatedUser = Depends(require_authenticated_user)):
+    allowed = ROLE_PERMISSIONS.get(user.role)
+    permissions = []
+    if allowed is None:
+        permissions = ["*"]
+    else:
+        permissions = list(allowed)
+    return {
+        "username": user.username,
+        "role": user.role,
+        "permissions": permissions,
+        "authentication_source": "snowflake_spcs" if is_spcs_authenticated(user.request) else "local_dev",
+        "caller_rights_available": has_caller_token(user.request),
+    }
+
+
+@router.get("/admin/users")
+async def list_users(user: AuthenticatedUser = Depends(require_role("SNOWCARE_ADMIN_ROLE"))):
     sql = """
         SELECT USER_ID, USERNAME, DISPLAY_NAME, ROLE,
                TO_VARCHAR(CREATED_AT, 'YYYY-MM-DD HH24:MI') AS CREATED_AT
@@ -33,29 +57,37 @@ async def list_users(_role: str = Depends(check_role)):
         raise HTTPException(status_code=502, detail=f"Database error: {exc}") from exc
 
 
-@router.get("/users/current")
-async def current_user(request: Request):
-    role = request.headers.get("X-User-Role", "admin")
+@router.get("/admin/users/current")
+async def current_user(user: AuthenticatedUser = Depends(require_authenticated_user)):
     return {
-        "user_id": "demo-user",
-        "user_name": "Demo User",
-        "user_role": role,
+        "user_id": user.username,
+        "user_name": user.username,
+        "user_role": user.role,
     }
 
 
-@router.post("/users/switch-role")
-async def switch_role(req: SwitchRoleRequest, _role: str = Depends(check_role)):
+@router.post("/admin/users/switch-role")
+async def switch_role(
+    req: SwitchRoleRequest,
+    user: AuthenticatedUser = Depends(require_authenticated_user),
+):
     return {
-        "status": "switched",
-        "new_role": req.role,
+        "status": "preview_only",
+        "actual_role": user.role,
+        "preview_role": req.role,
+        "note": "Demo role preview does not change backend authorization. "
+                "Your actual permissions remain based on your Snowflake identity.",
     }
 
 
-@router.get("/audit")
+@router.get("/admin/audit")
 async def list_audit(
     member_id: str | None = Query(None),
     user_role: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
+    user: AuthenticatedUser = Depends(
+        require_role("SNOWCARE_ADMIN_ROLE", "COMPLIANCE_ANALYST_ROLE")
+    ),
 ):
     conditions: list[str] = []
     if member_id:
@@ -99,8 +131,13 @@ async def list_audit(
         raise HTTPException(status_code=502, detail=f"Database error: {exc}") from exc
 
 
-@router.get("/jobs")
-async def list_jobs(limit: int = Query(20, ge=1, le=100), _role: str = Depends(check_role)):
+@router.get("/admin/jobs")
+async def list_jobs(
+    limit: int = Query(20, ge=1, le=100),
+    user: AuthenticatedUser = Depends(
+        require_role("SNOWCARE_ADMIN_ROLE", "OPERATIONS_ANALYST_ROLE")
+    ),
+):
     sql = f"""
         SELECT NAME, STATE, ERROR_CODE, ERROR_MESSAGE,
                TO_VARCHAR(TO_TIMESTAMP(SCHEDULED_TIME), 'YYYY-MM-DD HH24:MI:SS') AS SCHEDULED_TIME,

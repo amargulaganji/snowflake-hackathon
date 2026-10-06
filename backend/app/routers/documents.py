@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import uuid
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 
 from app.services.sql_client import sql_client
+from app.services.role_auth import require_permission, require_role, AuthenticatedUser
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -33,6 +34,9 @@ async def upload_document(
     file: UploadFile = File(...),
     category: str = Query("general", description="Document category"),
     member_id: str | None = Query(None, description="Associated member ID"),
+    user: AuthenticatedUser = Depends(
+        require_role("SNOWCARE_ADMIN_ROLE", "CARE_MANAGER_ROLE")
+    ),
 ):
     filename = file.filename or "untitled"
     safe_filename = filename.replace("'", "''")
@@ -96,6 +100,7 @@ async def list_documents(
     category: str | None = Query(None),
     member_id: str | None = Query(None),
     processing_status: str | None = Query(None),
+    user: AuthenticatedUser = Depends(require_permission),
 ):
     conditions: list[str] = []
     if category:
@@ -130,7 +135,10 @@ async def list_documents(
 
 
 @router.get("/{document_id}")
-async def get_document(document_id: str):
+async def get_document(
+    document_id: str,
+    user: AuthenticatedUser = Depends(require_permission),
+):
     safe_id = document_id.replace("'", "''")
     try:
         doc_rows = await sql_client.execute(
@@ -171,7 +179,12 @@ async def get_document(document_id: str):
 
 
 @router.delete("/{document_id}")
-async def delete_document(document_id: str):
+async def delete_document(
+    document_id: str,
+    user: AuthenticatedUser = Depends(
+        require_role("SNOWCARE_ADMIN_ROLE", "CARE_MANAGER_ROLE")
+    ),
+):
     safe_id = document_id.replace("'", "''")
     try:
         await sql_client.execute(f"DELETE FROM DOCUMENT_CHUNK WHERE DOCUMENT_ID = '{safe_id}'")
