@@ -168,6 +168,23 @@ body {
 }
 .nav-item:hover .nav-info-icon { opacity: 0.6; }
 
+.nav-dashboard-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-dashboard-link:hover {
+  background: rgba(56, 126, 209, 0.08);
+  color: var(--accent);
+}
+
 .nav-footer {
   border-top: 1px solid var(--border);
   padding: 8px;
@@ -443,10 +460,22 @@ body {
 
 .chat-input-form {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 16px 24px;
   border-top: 1px solid var(--border);
   background: var(--surface);
+}
+
+.chat-guardrail-warning {
+  width: 100%;
+  padding: 10px 14px;
+  background: #FFF3E0;
+  border: 1px solid #FFB74D;
+  border-radius: var(--radius);
+  color: #E65100;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .chat-input {

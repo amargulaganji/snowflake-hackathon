@@ -160,11 +160,11 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("Risk Distribution")
     risk_df = load_risk_distribution()
-    st.bar_chart(risk_df, x="RISK_LEVEL", y="MEMBER_COUNT", color="RISK_LEVEL")
+    st.bar_chart(risk_df, x="RISK_LEVEL", y="MEMBER_COUNT")
 with col2:
     st.subheader("Plan Type Distribution")
     plan_df = load_plan_distribution()
-    st.bar_chart(plan_df, x="PLAN_TYPE", y="MEMBERS", color="PLAN_TYPE")
+    st.bar_chart(plan_df, x="PLAN_TYPE", y="MEMBERS")
 
 # --- Medications & Labs ---
 col3, col4 = st.columns(2)

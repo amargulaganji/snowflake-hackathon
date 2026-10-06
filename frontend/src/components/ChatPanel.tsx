@@ -16,6 +16,11 @@ interface ChatPanelProps {
   onRetry?: () => void;
 }
 
+const GUARDRAIL_MESSAGE =
+  'I can only answer questions related to patient clinical data, medications, diagnoses, lab results, encounters, care plans, risk assessments, drug interactions, and policy compliance. Please rephrase your question in a clinical context.';
+
+const BLOCKED_PATTERNS = /(?:api|secret|access|auth)\s*(?:key|token|credential)|\.env|environment\s*variable|password|private\s*key|system\s*prompt|ignore\s*(?:previous|above|prior)\s*(?:instruction|prompt)|(?:reveal|show|dump|list)\s*(?:your|the|all)\s*(?:prompt|instruction|config|secret|key)|pretend\s*you\s*are|jailbreak|bypass|override|snowflake\s*(?:account|warehouse|database|role|url)|architecture|infrastructure|deployment|source\s*code|tech\s*stack|how\s*(?:is|was)\s*(?:this|the)\s*(?:app|application|system)\s*(?:built|made|deployed)|tell\s*me\s*(?:a\s*)?(?:joke|story|poem|recipe)|who\s*(?:is|was)\s*(?:the\s*)?president|capital\s*of|weather\s*(?:in|today|forecast)/i;
+
 const LOADING_MESSAGES = [
   'Retrieving clinical data...',
   'Analyzing medications...',
@@ -44,10 +49,18 @@ export function ChatPanel({ messages, onSend, loading, disabled, member, error, 
     return () => clearInterval(interval);
   }, [loading]);
 
+  const [guardrailWarning, setGuardrailWarning] = useState(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || loading || disabled) return;
-    onSend(input.trim());
+    const question = input.trim();
+    setGuardrailWarning(false);
+    if (BLOCKED_PATTERNS.test(question)) {
+      setGuardrailWarning(true);
+      return;
+    }
+    onSend(question);
     setInput('');
   };
 
@@ -94,6 +107,11 @@ export function ChatPanel({ messages, onSend, loading, disabled, member, error, 
         <div ref={messagesEndRef} />
       </div>
       <form className="chat-input-form" onSubmit={handleSubmit}>
+        {guardrailWarning && (
+          <div className="chat-guardrail-warning">
+            {GUARDRAIL_MESSAGE}
+          </div>
+        )}
         <input
           type="text"
           className="chat-input"

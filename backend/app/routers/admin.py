@@ -10,7 +10,7 @@ from app.services.role_auth import (
     AuthenticatedUser,
     ROLE_PERMISSIONS,
 )
-from app.services.sql_client import sql_client
+from app.services.sql_client import sql_client, _bind
 from app.auth import is_spcs_authenticated, has_caller_token
 
 router = APIRouter(tags=["admin"])
@@ -90,12 +90,16 @@ async def list_audit(
     ),
 ):
     conditions: list[str] = []
+    params: list = []
     if member_id:
-        conditions.append(f"MEMBER_ID = '{member_id.replace(chr(39), chr(39)*2)}'")
+        conditions.append("MEMBER_ID = ?")
+        params.append(member_id)
     if user_role:
-        conditions.append(f"USER_ROLE = '{user_role.replace(chr(39), chr(39)*2)}'")
+        conditions.append("USER_ROLE = ?")
+        params.append(user_role)
 
     where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+    params.append(limit)
     sql = f"""
         SELECT AUDIT_ID, USER_ID, USER_ROLE, MEMBER_ID, ACTION, QUESTION,
                TOOLS_INVOKED, SOURCES_USED, RISK_LEVEL,
@@ -104,10 +108,10 @@ async def list_audit(
                TO_VARCHAR(TIMESTAMP, 'YYYY-MM-DD HH24:MI') AS TIMESTAMP
         FROM AI_AUDIT_LOG{where}
         ORDER BY TIMESTAMP DESC
-        LIMIT {limit}
+        LIMIT ?
     """
     try:
-        rows = await sql_client.execute(sql)
+        rows = await sql_client.execute(sql, bindings=_bind(params))
         return [
             {
                 "audit_id": r.get("AUDIT_ID", ""),
@@ -145,13 +149,13 @@ async def list_jobs(
                TO_VARCHAR(TO_TIMESTAMP(QUERY_START_TIME), 'YYYY-MM-DD HH24:MI:SS') AS QUERY_START_TIME,
                DATABASE_NAME, SCHEMA_NAME
         FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
-            RESULT_LIMIT => {limit}
+            RESULT_LIMIT => ?
         ))
         WHERE DATABASE_NAME = 'CLINICAL_COPILOT'
         ORDER BY SCHEDULED_TIME DESC
     """
     try:
-        rows = await sql_client.execute(sql)
+        rows = await sql_client.execute(sql, bindings=_bind([limit]))
         results = []
         for r in rows:
             state = r.get("STATE", "")

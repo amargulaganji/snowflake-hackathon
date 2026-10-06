@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 
-from app.services.sql_client import sql_client
+from app.services.sql_client import sql_client, _bind
 from app.services.role_auth import require_permission, require_role, AuthenticatedUser
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -35,12 +35,10 @@ async def upload_document(
     category: str = Query("general", description="Document category"),
     member_id: str | None = Query(None, description="Associated member ID"),
     user: AuthenticatedUser = Depends(
-        require_role("SNOWCARE_ADMIN_ROLE", "CARE_MANAGER_ROLE")
+        require_role("SNOWCARE_ADMIN_ROLE", "CARE_MANAGER_ROLE", "PHYSICIAN_ROLE")
     ),
 ):
     filename = file.filename or "untitled"
-    safe_filename = filename.replace("'", "''")
-    safe_category = category.replace("'", "''")
     doc_id = f"DOC-{uuid.uuid4().hex[:12].upper()}"
 
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -54,34 +52,32 @@ async def upload_document(
         raw = await file.read()
         content_text = raw.decode("utf-8", errors="replace")
 
-    safe_content = content_text.replace("'", "''")
-    member_val = f"'{member_id.replace(chr(39), chr(39)*2)}'" if member_id else "NULL"
-
-    insert_doc = f"""
+    insert_doc = """
         INSERT INTO DOCUMENT (DOCUMENT_ID, FILE_NAME, CATEGORY, MEMBER_ID, CONTENT_TEXT, PROCESSING_STATUS)
-        VALUES ('{doc_id}', '{safe_filename}', '{safe_category}', {member_val}, '{safe_content}', 'processing')
+        VALUES (?, ?, ?, ?, ?, 'processing')
     """
     try:
-        await sql_client.execute(insert_doc)
+        await sql_client.execute(insert_doc, bindings=_bind([doc_id, filename, category, member_id, content_text]))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Database error: {exc}") from exc
 
     chunks = _chunk_text(content_text)
     for i, chunk in enumerate(chunks):
         chunk_id = f"{doc_id}-C{i:04d}"
-        safe_chunk = chunk.replace("'", "''")
-        insert_chunk = f"""
+        insert_chunk = """
             INSERT INTO DOCUMENT_CHUNK (CHUNK_ID, DOCUMENT_ID, CHUNK_INDEX, CONTENT_TEXT)
-            VALUES ('{chunk_id}', '{doc_id}', {i}, '{safe_chunk}')
+            VALUES (?, ?, ?, ?)
         """
         try:
-            await sql_client.execute(insert_chunk)
+            await sql_client.execute(insert_chunk, bindings=_bind([chunk_id, doc_id, i, chunk]))
         except Exception:
             pass
 
-    update_status = f"UPDATE DOCUMENT SET PROCESSING_STATUS = 'completed' WHERE DOCUMENT_ID = '{doc_id}'"
     try:
-        await sql_client.execute(update_status)
+        await sql_client.execute(
+            "UPDATE DOCUMENT SET PROCESSING_STATUS = 'completed' WHERE DOCUMENT_ID = ?",
+            bindings=_bind([doc_id]),
+        )
     except Exception:
         pass
 
@@ -103,12 +99,16 @@ async def list_documents(
     user: AuthenticatedUser = Depends(require_permission),
 ):
     conditions: list[str] = []
+    params: list = []
     if category:
-        conditions.append(f"CATEGORY = '{category.replace(chr(39), chr(39)*2)}'")
+        conditions.append("CATEGORY = ?")
+        params.append(category)
     if member_id:
-        conditions.append(f"MEMBER_ID = '{member_id.replace(chr(39), chr(39)*2)}'")
+        conditions.append("MEMBER_ID = ?")
+        params.append(member_id)
     if processing_status:
-        conditions.append(f"PROCESSING_STATUS = '{processing_status.replace(chr(39), chr(39)*2)}'")
+        conditions.append("PROCESSING_STATUS = ?")
+        params.append(processing_status)
 
     where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
     sql = f"""
@@ -118,7 +118,7 @@ async def list_documents(
         ORDER BY INGESTED_AT DESC
     """
     try:
-        rows = await sql_client.execute(sql)
+        rows = await sql_client.execute(sql, bindings=_bind(params) if params else None)
         return [
             {
                 "document_id": r["DOCUMENT_ID"],
@@ -139,20 +139,21 @@ async def get_document(
     document_id: str,
     user: AuthenticatedUser = Depends(require_permission),
 ):
-    safe_id = document_id.replace("'", "''")
     try:
         doc_rows = await sql_client.execute(
-            f"SELECT DOCUMENT_ID, FILE_NAME, CATEGORY, MEMBER_ID, CONTENT_TEXT, PROCESSING_STATUS, "
-            f"TO_VARCHAR(INGESTED_AT, 'YYYY-MM-DD HH24:MI') AS INGESTED_AT "
-            f"FROM DOCUMENT WHERE DOCUMENT_ID = '{safe_id}'"
+            "SELECT DOCUMENT_ID, FILE_NAME, CATEGORY, MEMBER_ID, CONTENT_TEXT, PROCESSING_STATUS, "
+            "TO_VARCHAR(INGESTED_AT, 'YYYY-MM-DD HH24:MI') AS INGESTED_AT "
+            "FROM DOCUMENT WHERE DOCUMENT_ID = ?",
+            bindings=_bind([document_id]),
         )
         if not doc_rows:
             raise HTTPException(status_code=404, detail="Document not found")
         d = doc_rows[0]
 
         chunk_rows = await sql_client.execute(
-            f"SELECT CHUNK_ID, CHUNK_INDEX, CONTENT_TEXT "
-            f"FROM DOCUMENT_CHUNK WHERE DOCUMENT_ID = '{safe_id}' ORDER BY CHUNK_INDEX"
+            "SELECT CHUNK_ID, CHUNK_INDEX, CONTENT_TEXT "
+            "FROM DOCUMENT_CHUNK WHERE DOCUMENT_ID = ? ORDER BY CHUNK_INDEX",
+            bindings=_bind([document_id]),
         )
 
         return {
@@ -182,13 +183,18 @@ async def get_document(
 async def delete_document(
     document_id: str,
     user: AuthenticatedUser = Depends(
-        require_role("SNOWCARE_ADMIN_ROLE", "CARE_MANAGER_ROLE")
+        require_role("SNOWCARE_ADMIN_ROLE", "CARE_MANAGER_ROLE", "PHYSICIAN_ROLE")
     ),
 ):
-    safe_id = document_id.replace("'", "''")
     try:
-        await sql_client.execute(f"DELETE FROM DOCUMENT_CHUNK WHERE DOCUMENT_ID = '{safe_id}'")
-        await sql_client.execute(f"DELETE FROM DOCUMENT WHERE DOCUMENT_ID = '{safe_id}'")
+        await sql_client.execute(
+            "DELETE FROM DOCUMENT_CHUNK WHERE DOCUMENT_ID = ?",
+            bindings=_bind([document_id]),
+        )
+        await sql_client.execute(
+            "DELETE FROM DOCUMENT WHERE DOCUMENT_ID = ?",
+            bindings=_bind([document_id]),
+        )
         return {"status": "deleted", "document_id": document_id}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Database error: {exc}") from exc

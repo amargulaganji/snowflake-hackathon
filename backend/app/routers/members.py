@@ -4,7 +4,7 @@ import asyncio
 import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.services.sql_client import sql_client
+from app.services.sql_client import sql_client, _bind
 from app.services.role_auth import require_permission, AuthenticatedUser
 
 router = APIRouter(prefix="/members", tags=["members"])
@@ -39,14 +39,14 @@ async def top_risk_members(
     limit: int = Query(10, ge=1, le=50),
     user: AuthenticatedUser = Depends(require_permission),
 ):
-    sql = f"""
+    sql = """
         SELECT MEMBER_ID, FIRST_NAME, LAST_NAME, AGE, GENDER, PLAN_TYPE, RISK_FLAGS
         FROM MEMBER
         ORDER BY ARRAY_SIZE(RISK_FLAGS) DESC, AGE DESC
-        LIMIT {limit}
+        LIMIT ?
     """
     try:
-        rows = await sql_client.execute(sql, caller_headers=user.caller_headers)
+        rows = await sql_client.execute(sql, caller_headers=user.caller_headers, bindings=_bind([limit]))
         return [_member_row_to_summary(r) for r in rows]
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Database error: {exc}") from exc
@@ -87,18 +87,18 @@ async def search_members(
 ):
     if not q.strip():
         return []
-    safe_q = q.replace("'", "''").strip()
-    sql = f"""
+    pattern = f"%{q.strip()}%"
+    sql = """
         SELECT MEMBER_ID, FIRST_NAME, LAST_NAME, AGE, GENDER, PLAN_TYPE, RISK_FLAGS
         FROM MEMBER
-        WHERE LOWER(FIRST_NAME) LIKE LOWER('%{safe_q}%')
-           OR LOWER(LAST_NAME) LIKE LOWER('%{safe_q}%')
-           OR UPPER(MEMBER_ID) LIKE UPPER('%{safe_q}%')
+        WHERE LOWER(FIRST_NAME) LIKE LOWER(?)
+           OR LOWER(LAST_NAME) LIKE LOWER(?)
+           OR UPPER(MEMBER_ID) LIKE UPPER(?)
         ORDER BY LAST_NAME, FIRST_NAME
         LIMIT 20
     """
     try:
-        rows = await sql_client.execute(sql, caller_headers=user.caller_headers)
+        rows = await sql_client.execute(sql, caller_headers=user.caller_headers, bindings=_bind([pattern, pattern, pattern]))
         return [_member_row_to_summary(r) for r in rows]
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Database error: {exc}") from exc
@@ -109,13 +109,13 @@ async def get_member(
     member_id: str,
     user: AuthenticatedUser = Depends(require_permission),
 ):
-    safe_id = member_id.replace("'", "''")
     ch = user.caller_headers
     try:
         member_rows = await sql_client.execute(
-            f"SELECT MEMBER_ID, FIRST_NAME, LAST_NAME, TO_VARCHAR(DOB, 'YYYY-MM-DD') AS DOB, AGE, GENDER, PLAN_TYPE, TO_VARCHAR(ENROLLMENT_DATE, 'YYYY-MM-DD') AS ENROLLMENT_DATE, PCP_NAME, RISK_FLAGS "
-            f"FROM MEMBER WHERE MEMBER_ID = '{safe_id}'",
+            "SELECT MEMBER_ID, FIRST_NAME, LAST_NAME, TO_VARCHAR(DOB, 'YYYY-MM-DD') AS DOB, AGE, GENDER, PLAN_TYPE, TO_VARCHAR(ENROLLMENT_DATE, 'YYYY-MM-DD') AS ENROLLMENT_DATE, PCP_NAME, RISK_FLAGS "
+            "FROM MEMBER WHERE MEMBER_ID = ?",
             caller_headers=ch,
+            bindings=_bind([member_id]),
         )
         if not member_rows:
             raise HTTPException(status_code=404, detail="Member not found")
@@ -123,39 +123,39 @@ async def get_member(
 
         enc_rows, med_rows, dx_rows, lab_rows, note_rows, claim_rows, att_rows = await asyncio.gather(
             sql_client.execute(
-                f"SELECT ENCOUNTER_ID, TO_VARCHAR(ENCOUNTER_DATE, 'YYYY-MM-DD') AS ENCOUNTER_DATE, ENCOUNTER_TYPE, PROVIDER_NAME, FACILITY, PRIMARY_DIAGNOSIS_CODE "
-                f"FROM ENCOUNTER WHERE MEMBER_ID = '{safe_id}' ORDER BY ENCOUNTER_DATE DESC",
-                caller_headers=ch,
+                "SELECT ENCOUNTER_ID, TO_VARCHAR(ENCOUNTER_DATE, 'YYYY-MM-DD') AS ENCOUNTER_DATE, ENCOUNTER_TYPE, PROVIDER_NAME, FACILITY, PRIMARY_DIAGNOSIS_CODE "
+                "FROM ENCOUNTER WHERE MEMBER_ID = ? ORDER BY ENCOUNTER_DATE DESC",
+                caller_headers=ch, bindings=_bind([member_id]),
             ),
             sql_client.execute(
-                f"SELECT MEDICATION_ID, DRUG_NAME, DOSAGE, FREQUENCY, STATUS, PRESCRIBER "
-                f"FROM MEDICATION WHERE MEMBER_ID = '{safe_id}' ORDER BY STATUS, DRUG_NAME",
-                caller_headers=ch,
+                "SELECT MEDICATION_ID, DRUG_NAME, DOSAGE, FREQUENCY, STATUS, PRESCRIBER "
+                "FROM MEDICATION WHERE MEMBER_ID = ? ORDER BY STATUS, DRUG_NAME",
+                caller_headers=ch, bindings=_bind([member_id]),
             ),
             sql_client.execute(
-                f"SELECT DIAGNOSIS_ID, ICD10_CODE, DESCRIPTION, TO_VARCHAR(DIAGNOSED_DATE, 'YYYY-MM-DD') AS DIAGNOSED_DATE, STATUS "
-                f"FROM DIAGNOSIS WHERE MEMBER_ID = '{safe_id}' ORDER BY DIAGNOSED_DATE DESC",
-                caller_headers=ch,
+                "SELECT DIAGNOSIS_ID, ICD10_CODE, DESCRIPTION, TO_VARCHAR(DIAGNOSED_DATE, 'YYYY-MM-DD') AS DIAGNOSED_DATE, STATUS "
+                "FROM DIAGNOSIS WHERE MEMBER_ID = ? ORDER BY DIAGNOSED_DATE DESC",
+                caller_headers=ch, bindings=_bind([member_id]),
             ),
             sql_client.execute(
-                f"SELECT LAB_ID, TEST_NAME, RESULT_VALUE, UNIT, REFERENCE_RANGE_LOW, REFERENCE_RANGE_HIGH, TO_VARCHAR(RESULT_DATE, 'YYYY-MM-DD') AS RESULT_DATE, ABNORMAL_FLAG "
-                f"FROM LAB_RESULT WHERE MEMBER_ID = '{safe_id}' ORDER BY RESULT_DATE DESC",
-                caller_headers=ch,
+                "SELECT LAB_ID, TEST_NAME, RESULT_VALUE, UNIT, REFERENCE_RANGE_LOW, REFERENCE_RANGE_HIGH, TO_VARCHAR(RESULT_DATE, 'YYYY-MM-DD') AS RESULT_DATE, ABNORMAL_FLAG "
+                "FROM LAB_RESULT WHERE MEMBER_ID = ? ORDER BY RESULT_DATE DESC",
+                caller_headers=ch, bindings=_bind([member_id]),
             ),
             sql_client.execute(
-                f"SELECT NOTE_ID, NOTE_TYPE, TO_VARCHAR(NOTE_DATE, 'YYYY-MM-DD') AS NOTE_DATE, AUTHOR, CONTENT_TEXT "
-                f"FROM CLINICAL_NOTE WHERE MEMBER_ID = '{safe_id}' ORDER BY NOTE_DATE DESC",
-                caller_headers=ch,
+                "SELECT NOTE_ID, NOTE_TYPE, TO_VARCHAR(NOTE_DATE, 'YYYY-MM-DD') AS NOTE_DATE, AUTHOR, CONTENT_TEXT "
+                "FROM CLINICAL_NOTE WHERE MEMBER_ID = ? ORDER BY NOTE_DATE DESC",
+                caller_headers=ch, bindings=_bind([member_id]),
             ),
             sql_client.execute(
-                f"SELECT CLAIM_ID, TO_VARCHAR(DATE_OF_SERVICE, 'YYYY-MM-DD') AS DATE_OF_SERVICE, PROCEDURE_CODE, DIAGNOSIS_CODE, PROVIDER, AMOUNT_BILLED, AMOUNT_PAID, STATUS, DENIAL_REASON "
-                f"FROM CLAIM WHERE MEMBER_ID = '{safe_id}' ORDER BY DATE_OF_SERVICE DESC",
-                caller_headers=ch,
+                "SELECT CLAIM_ID, TO_VARCHAR(DATE_OF_SERVICE, 'YYYY-MM-DD') AS DATE_OF_SERVICE, PROCEDURE_CODE, DIAGNOSIS_CODE, PROVIDER, AMOUNT_BILLED, AMOUNT_PAID, STATUS, DENIAL_REASON "
+                "FROM CLAIM WHERE MEMBER_ID = ? ORDER BY DATE_OF_SERVICE DESC",
+                caller_headers=ch, bindings=_bind([member_id]),
             ),
             sql_client.execute(
-                f"SELECT ATTACHMENT_ID, FILE_NAME, FILE_TYPE, TO_VARCHAR(UPLOAD_DATE, 'YYYY-MM-DD') AS UPLOAD_DATE, RELATED_ENCOUNTER_ID, SHORT_NOTE, STORAGE_PATH "
-                f"FROM ATTACHMENT WHERE MEMBER_ID = '{safe_id}' ORDER BY UPLOAD_DATE DESC",
-                caller_headers=ch,
+                "SELECT ATTACHMENT_ID, FILE_NAME, FILE_TYPE, TO_VARCHAR(UPLOAD_DATE, 'YYYY-MM-DD') AS UPLOAD_DATE, RELATED_ENCOUNTER_ID, SHORT_NOTE, STORAGE_PATH "
+                "FROM ATTACHMENT WHERE MEMBER_ID = ? ORDER BY UPLOAD_DATE DESC",
+                caller_headers=ch, bindings=_bind([member_id]),
             ),
         )
 
@@ -210,30 +210,30 @@ async def risk_explanation(
     member_id: str,
     user: AuthenticatedUser = Depends(require_permission),
 ):
-    safe_id = member_id.replace("'", "''")
     ch = user.caller_headers
+    b = _bind([member_id])
     try:
         delta_rows, lab_rows, med_rows, dx_rows = await asyncio.gather(
             sql_client.execute(
-                f"SELECT OLD_RISK, NEW_RISK, TO_VARCHAR(CHANGED_AT, 'YYYY-MM-DD') AS CHANGED_AT, REASON "
-                f"FROM RISK_DELTA_LOG WHERE MEMBER_ID = '{safe_id}' ORDER BY CHANGED_AT DESC LIMIT 1",
-                caller_headers=ch,
+                "SELECT OLD_RISK, NEW_RISK, TO_VARCHAR(CHANGED_AT, 'YYYY-MM-DD') AS CHANGED_AT, REASON "
+                "FROM RISK_DELTA_LOG WHERE MEMBER_ID = ? ORDER BY CHANGED_AT DESC LIMIT 1",
+                caller_headers=ch, bindings=b,
             ),
             sql_client.execute(
-                f"SELECT TEST_NAME, RESULT_VALUE, UNIT "
-                f"FROM LAB_RESULT WHERE MEMBER_ID = '{safe_id}' AND ABNORMAL_FLAG = TRUE "
-                f"ORDER BY RESULT_DATE DESC LIMIT 10",
-                caller_headers=ch,
+                "SELECT TEST_NAME, RESULT_VALUE, UNIT "
+                "FROM LAB_RESULT WHERE MEMBER_ID = ? AND ABNORMAL_FLAG = TRUE "
+                "ORDER BY RESULT_DATE DESC LIMIT 10",
+                caller_headers=ch, bindings=b,
             ),
             sql_client.execute(
-                f"SELECT COUNT(*) AS CNT FROM MEDICATION "
-                f"WHERE MEMBER_ID = '{safe_id}' AND UPPER(STATUS) = 'ACTIVE'",
-                caller_headers=ch,
+                "SELECT COUNT(*) AS CNT FROM MEDICATION "
+                "WHERE MEMBER_ID = ? AND UPPER(STATUS) = 'ACTIVE'",
+                caller_headers=ch, bindings=b,
             ),
             sql_client.execute(
-                f"SELECT DESCRIPTION FROM DIAGNOSIS "
-                f"WHERE MEMBER_ID = '{safe_id}' AND UPPER(STATUS) = 'ACTIVE'",
-                caller_headers=ch,
+                "SELECT DESCRIPTION FROM DIAGNOSIS "
+                "WHERE MEMBER_ID = ? AND UPPER(STATUS) = 'ACTIVE'",
+                caller_headers=ch, bindings=b,
             ),
         )
 
@@ -286,33 +286,33 @@ async def member_summary(
     member_id: str,
     user: AuthenticatedUser = Depends(require_permission),
 ):
-    safe_id = member_id.replace("'", "''")
     ch = user.caller_headers
+    b = _bind([member_id])
     try:
         results = await asyncio.gather(
             sql_client.execute(
-                f"SELECT COUNT(*) AS CNT FROM MEDICATION WHERE MEMBER_ID = '{safe_id}' AND UPPER(STATUS) = 'ACTIVE'",
-                caller_headers=ch,
+                "SELECT COUNT(*) AS CNT FROM MEDICATION WHERE MEMBER_ID = ? AND UPPER(STATUS) = 'ACTIVE'",
+                caller_headers=ch, bindings=b,
             ),
             sql_client.execute(
-                f"SELECT COUNT(*) AS CNT FROM DIAGNOSIS WHERE MEMBER_ID = '{safe_id}' AND UPPER(STATUS) = 'ACTIVE'",
-                caller_headers=ch,
+                "SELECT COUNT(*) AS CNT FROM DIAGNOSIS WHERE MEMBER_ID = ? AND UPPER(STATUS) = 'ACTIVE'",
+                caller_headers=ch, bindings=b,
             ),
             sql_client.execute(
-                f"SELECT COUNT(*) AS CNT FROM LAB_RESULT WHERE MEMBER_ID = '{safe_id}' AND ABNORMAL_FLAG = TRUE",
-                caller_headers=ch,
+                "SELECT COUNT(*) AS CNT FROM LAB_RESULT WHERE MEMBER_ID = ? AND ABNORMAL_FLAG = TRUE",
+                caller_headers=ch, bindings=b,
             ),
             sql_client.execute(
-                f"SELECT COUNT(*) AS CNT FROM ENCOUNTER WHERE MEMBER_ID = '{safe_id}' AND ENCOUNTER_DATE >= DATEADD(day, -90, CURRENT_DATE())",
-                caller_headers=ch,
+                "SELECT COUNT(*) AS CNT FROM ENCOUNTER WHERE MEMBER_ID = ? AND ENCOUNTER_DATE >= DATEADD(day, -90, CURRENT_DATE())",
+                caller_headers=ch, bindings=b,
             ),
             sql_client.execute(
-                f"SELECT COUNT(*) AS CNT FROM CLAIM WHERE MEMBER_ID = '{safe_id}'",
-                caller_headers=ch,
+                "SELECT COUNT(*) AS CNT FROM CLAIM WHERE MEMBER_ID = ?",
+                caller_headers=ch, bindings=b,
             ),
             sql_client.execute(
-                f"SELECT COUNT(*) AS CNT FROM DOCUMENT WHERE MEMBER_ID = '{safe_id}'",
-                caller_headers=ch,
+                "SELECT COUNT(*) AS CNT FROM DOCUMENT WHERE MEMBER_ID = ?",
+                caller_headers=ch, bindings=b,
             ),
         )
 

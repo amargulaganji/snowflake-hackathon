@@ -17,6 +17,10 @@ logger = logging.getLogger("snowcare360.auth")
 
 ROLE_PERMISSIONS: dict[str, list[str] | None] = {
     "SNOWCARE_ADMIN_ROLE": None,
+    "PHYSICIAN_ROLE": [
+        "/members", "/ask", "/health", "/documents", "/studio",
+        "/auth",
+    ],
     "CARE_MANAGER_ROLE": [
         "/members", "/ask", "/health", "/documents", "/studio",
         "/auth",
@@ -46,6 +50,8 @@ async def _resolve_snowflake_role(username: str) -> str:
             role_map = {
                 "ADMIN": "SNOWCARE_ADMIN_ROLE",
                 "SNOWCARE_ADMIN_ROLE": "SNOWCARE_ADMIN_ROLE",
+                "PHYSICIAN": "PHYSICIAN_ROLE",
+                "PHYSICIAN_ROLE": "PHYSICIAN_ROLE",
                 "CARE_MANAGER": "CARE_MANAGER_ROLE",
                 "CARE_MANAGER_ROLE": "CARE_MANAGER_ROLE",
                 "COMPLIANCE_ANALYST": "COMPLIANCE_ANALYST_ROLE",
@@ -54,12 +60,17 @@ async def _resolve_snowflake_role(username: str) -> str:
                 "OPERATIONS_ANALYST": "OPERATIONS_ANALYST_ROLE",
                 "OPERATIONS_ANALYST_ROLE": "OPERATIONS_ANALYST_ROLE",
             }
-            resolved = role_map.get(role, "OPERATIONS_ANALYST_ROLE")
+            resolved = role_map.get(role)
+            if resolved is None:
+                logger.warning("Unknown role '%s' for user %s — access denied", role, username)
+                _user_role_cache[username] = "__DENIED__"
+                return "__DENIED__"
             _user_role_cache[username] = resolved
             return resolved
     except Exception as exc:
         logger.warning("Failed to resolve role for %s: %s", username, exc)
-    return "OPERATIONS_ANALYST_ROLE"
+    logger.warning("No APP_USER entry for %s — access denied", username)
+    return "__DENIED__"
 
 
 class AuthenticatedUser:
@@ -88,6 +99,11 @@ async def require_authenticated_user(request: Request) -> AuthenticatedUser:
             detail="Authentication required. Access via Snowflake-authenticated SPCS endpoint.",
         )
     role = await _resolve_snowflake_role(username)
+    if role == "__DENIED__":
+        raise HTTPException(
+            status_code=403,
+            detail=f"User {username} is not mapped to any application role. Contact an administrator.",
+        )
     return AuthenticatedUser(username=username, role=role, request=request)
 
 

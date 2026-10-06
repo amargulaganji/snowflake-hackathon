@@ -23,5 +23,20 @@ class Settings(BaseSettings):
             return f"https://{spcs_host}"
         return self.snowflake_account_url
 
+    @property
+    def account_url(self) -> str:
+        """The external account URL — needed for Cortex Agent API which
+        doesn't work on the internal SPCS host."""
+        spcs_host = os.getenv("SNOWFLAKE_HOST")
+        if spcs_host:
+            # SNOWFLAKE_HOST is like cn78418.ap-southeast-7.aws.snowflakecomputing.com
+            # SNOWFLAKE_ACCOUNT is the account locator like omwcxrs-bz26859
+            account = os.getenv("SNOWFLAKE_ACCOUNT", "")
+            if account:
+                return f"https://{account}.snowflakecomputing.com"
+            # Fallback: use the SPCS host itself
+            return f"https://{spcs_host}"
+        return self.snowflake_account_url
+
 
 settings = Settings()

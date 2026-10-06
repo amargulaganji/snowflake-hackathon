@@ -61,6 +61,7 @@ export default function App() {
         setUserName(data.username || 'Unknown');
         const roleMap: Record<string, UserRole> = {
           SNOWCARE_ADMIN_ROLE: 'admin',
+          PHYSICIAN_ROLE: 'physician',
           CARE_MANAGER_ROLE: 'care_manager',
           COMPLIANCE_ANALYST_ROLE: 'compliance_analyst',
           OPERATIONS_ANALYST_ROLE: 'ops_analyst',

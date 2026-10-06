@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import {
   LayoutDashboard, Users, UserPlus, FileText, Settings,
-  ClipboardCheck, Shield, ChevronDown, ChevronRight, Activity
+  ClipboardCheck, Shield, ChevronDown, ChevronRight, Activity,
+  BarChart3, ExternalLink
 } from 'lucide-react';
 
 export type AppPage =
@@ -15,7 +16,7 @@ export type AppPage =
   | 'settings'
   | 'about';
 
-export type UserRole = 'care_manager' | 'compliance_analyst' | 'ops_analyst' | 'admin';
+export type UserRole = 'physician' | 'care_manager' | 'compliance_analyst' | 'ops_analyst' | 'admin';
 
 interface AppNavProps {
   currentPage: AppPage;
@@ -36,20 +37,20 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Overview',
     items: [
-      { key: 'worklist', label: 'Worklist', icon: LayoutDashboard, roles: ['care_manager', 'ops_analyst', 'admin'] },
+      { key: 'worklist', label: 'Worklist', icon: LayoutDashboard, roles: ['physician', 'care_manager', 'ops_analyst', 'admin'] },
     ],
   },
   {
     label: 'Care',
     items: [
-      { key: 'members', label: 'Members', icon: Users, roles: ['care_manager', 'compliance_analyst', 'ops_analyst', 'admin'] },
-      { key: 'member-studio', label: 'Member Studio', icon: UserPlus, roles: ['admin'] },
+      { key: 'members', label: 'Members', icon: Users, roles: ['physician', 'care_manager', 'compliance_analyst', 'ops_analyst', 'admin'] },
+      { key: 'member-studio', label: 'Member Studio', icon: UserPlus, roles: ['physician', 'care_manager'] },
     ],
   },
   {
     label: 'Knowledge',
     items: [
-      { key: 'documents', label: 'Documents', icon: FileText, roles: ['care_manager', 'compliance_analyst', 'admin'] },
+      { key: 'documents', label: 'Documents', icon: FileText, roles: ['physician', 'care_manager', 'compliance_analyst', 'admin'] },
     ],
   },
   {
@@ -68,6 +69,7 @@ const NAV_SECTIONS: NavSection[] = [
 ];
 
 const ROLE_LABELS: Record<UserRole, string> = {
+  physician: 'Physician',
   care_manager: 'Care Manager',
   compliance_analyst: 'Compliance Analyst',
   ops_analyst: 'Operations Analyst',
@@ -83,6 +85,8 @@ members: 'Search and browse synthetic members and open their complete Member 360
   audit: 'Review AI questions, evidence sources, tools used, guardrail outcomes, and response provenance.',
   settings: 'Manage users, roles, risk configuration, document sources, policies, and application settings.',
 };
+
+const DASHBOARD_URL = 'https://app.snowflake.com/OMWCXRS-BZ26859/#/streamlit-apps/CLINICAL_COPILOT.CORE.SNOWCARE360_DASHBOARD';
 
 export function AppNav({ currentPage, onNavigate, currentRole, onRoleChange, userName, isPreview, actualRole }: AppNavProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(NAV_SECTIONS.map((s) => s.label)));
@@ -141,6 +145,20 @@ export function AppNav({ currentPage, onNavigate, currentRole, onRoleChange, use
           );
         })}
       </div>
+
+      {currentRole === 'admin' && (
+        <a
+          href={DASHBOARD_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="nav-item nav-dashboard-link"
+          title="Open population health dashboard in Snowsight (Streamlit)"
+        >
+          <BarChart3 size={16} />
+          <span>Dashboard</span>
+          <ExternalLink size={12} style={{ marginLeft: 'auto', opacity: 0.5 }} />
+        </a>
+      )}
 
       <div className="nav-footer">
         <div className="nav-user-card" onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}>
